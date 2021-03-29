@@ -1,14 +1,16 @@
 import argparse
 import pdftitle
 import logging
-import scholarly
+import requests
+import json
+from bibtexparser.bwriter import BibTexWriter
+from bibtexparser.bibdatabase import BibDatabase
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument( '-p', '--pdf', dest="pdf_file", required=True, help='pdf file')
     parser.add_argument( '-t', '--title', dest="title", help='manually specify title')
-    parser.add_argument( '-T', '--tor', dest="tor", help='path to Tor')
     args = parser.parse_args()
     return args
 
@@ -37,16 +39,55 @@ def main():
             return 1
         logger.info( f'extracted title from pdf: "{title}"' )
 
-    if args.tor is not None:
-        logger.info( f'using Tor as a proxy' )
-        pg = scholarly.ProxyGenerator()
-        pg.Tor_Internal(tor_cmd = args.tor)
-        scholarly.scholarly.use_proxy(pg)
-    logger.info( 'querying Google Scholar...')
-    search_query = scholarly.scholarly.search_pubs(title)
-    pub = next(search_query)
-    print( scholarly.bibtex(pub) )
-    
+
+    logger.info( "grabbing records from dblp" )
+    payload = {
+        'q' : title,
+        'format' : 'json',
+    }
+    r = requests.get( "https://dblp.org/search/publ/api", params=payload )
+    logger.info( f'request submitted via {r.url}')
+    j = r.json()
+
+    if j["result"]["status"]["@code"] != "200":
+        logger.error( "DBLP search did not complete successfully" )
+        return 1
+    else:
+        logger.info( "dblp search succeeded" )
+
+    db = BibDatabase()
+    db.entries = []
+
+    for hit in j["result"]["hits"]["hit"]:
+        logger.info( f'processing result with id {hit["info"]["key"]}' )
+        authors = []
+        for author in hit["info"]["authors"]["author"]:
+            authors += [ author["text"] ]
+        authors = " and ".join(authors)
+        pubtype = "misc"
+        venuetype = "howpublished"
+
+        ptype = hit["info"]["type"]
+        if ptype == "Conference and Workshop Papers":
+            pubtype = "inproceedings"
+            venuetype = "booktitle"       
+        
+        entry = {
+            'title' : hit["info"]['title'],
+            'year' : hit["info"]['year'],
+            'author' : authors,
+            'type' : pubtype,
+            'id' : hit["info"]['key'],
+            venuetype : hit["info"]["venue"]
+        }
+        db.entries += [entry]
+
+    #json_formatted_str = json.dumps(j, indent=2)
+    #logger.debug(json_formatted_str)
+
+    writer = BibTexWriter()
+    writer.write(db)
+
     return 0            # all's well that ends well
 
 
