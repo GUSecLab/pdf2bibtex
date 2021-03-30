@@ -86,6 +86,10 @@ def main():
     j = query_dblp( title )
     if j is None:  return 1
 
+    if "hit" not in j["result"]["hits"]:
+        logger.error( "DBLP didn't return any relevant hits. Sorry!" )
+        return 1
+
     db = BibDatabase()
     db.entries = []
 
