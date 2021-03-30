@@ -1,3 +1,19 @@
+"""
+pdf2bibtex
+
+A program that takes as input an academic paper in PDF format,
+and spits out the BibTeX for that paper.
+
+BibTeX is crudely generated from querying DBLP based on the extracted
+title of the PDF file.
+
+
+This program was (quickly) written by Micah Sherr <msherr@cs.georgetown.edu>.
+
+Use at your own risk.
+"""
+
+
 import argparse
 import pdftitle
 import logging
@@ -11,20 +27,47 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument( '-p', '--pdf', dest="pdf_file", required=True, help='pdf file')
     parser.add_argument( '-t', '--title', dest="title", help='manually specify title')
+    parser.add_argument( '-l', '--log', dest="log", action='store_true', help='enable logging')
     args = parser.parse_args()
     return args
 
 
+def query_dblp( title ):
+    global logger
+    logger.info( "grabbing records from dblp" )
+    payload = {
+        'q' : title,
+        'format' : 'json',
+    }
+    r = requests.get( "https://dblp.org/search/publ/api", params=payload )
+    logger.info( f'request submitted via {r.url}')
+    j = r.json()
+    if j["result"]["status"]["@code"] != "200":
+        logger.error( "DBLP search did not complete successfully" )
+        return None
+    else:
+        logger.info( "dblp search succeeded" )
+
+    # dump the DBLP results
+    logger.debug( f'raw DBLP result: {json.dumps(j)}' )
+    
+    return j
+
+
 def main():
-    logger = logging.getLogger("pdf2bibtex")
-    logger.setLevel(logging.DEBUG)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.DEBUG)
-    logger.addHandler(ch)
-    formatter = logging.Formatter('%(asctime)s %(message)s')
-    ch.setFormatter(formatter)
+    global logger
 
     args = parse_args()
+
+    logger = logging.getLogger("pdf2bibtex")
+    if args.log:
+        # set up logging
+        logger.setLevel(logging.DEBUG)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        logger.addHandler(ch)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        ch.setFormatter(formatter)
 
     if args.title is not None:
         title = args.title
@@ -39,54 +82,59 @@ def main():
             return 1
         logger.info( f'extracted title from pdf: "{title}"' )
 
-
-    logger.info( "grabbing records from dblp" )
-    payload = {
-        'q' : title,
-        'format' : 'json',
-    }
-    r = requests.get( "https://dblp.org/search/publ/api", params=payload )
-    logger.info( f'request submitted via {r.url}')
-    j = r.json()
-
-    if j["result"]["status"]["@code"] != "200":
-        logger.error( "DBLP search did not complete successfully" )
-        return 1
-    else:
-        logger.info( "dblp search succeeded" )
+    j = query_dblp( title )
+    if j is None:  return 1
 
     db = BibDatabase()
     db.entries = []
 
     for hit in j["result"]["hits"]["hit"]:
         logger.info( f'processing result with id {hit["info"]["key"]}' )
+
+        # first, parse the authors
         authors = []
+        first_author = None
         for author in hit["info"]["authors"]["author"]:
             authors += [ author["text"] ]
+            if first_author is None:
+                first_author = author["text"].split(" ")[1]
         authors = " and ".join(authors)
+        
+        # next, figure out the type of publicaton
         pubtype = "misc"
         venuetype = "howpublished"
-
         ptype = hit["info"]["type"]
         if ptype == "Conference and Workshop Papers":
             pubtype = "inproceedings"
-            venuetype = "booktitle"       
+            venuetype = "booktitle"
+        elif ptype == "Journal Articles":
+            pubtype = "article"
+            venuetype = "journal"
+        else:
+            logger.warning( f"unsupported pub type: {ptype}" ) 
         
+        # generate a key for this bibtex entry
+        year = hit["info"]['year']
+        key = f'{first_author}{year}'
+
+        logger.debug( f'processing entry {key}, type {pubtype}')
+
+        # add the entry to the bibtex DB
         entry = {
             'title' : hit["info"]['title'],
-            'year' : hit["info"]['year'],
+            'year' : year,
             'author' : authors,
-            'type' : pubtype,
-            'id' : hit["info"]['key'],
+            'ENTRYTYPE' : pubtype,
+            'ID' : key,
             venuetype : hit["info"]["venue"]
-        }
-        db.entries += [entry]
+        } 
+        if "volume" in hit["info"]:  entry["volume"] = hit["info"]["volume"]
+        if "number" in hit["info"]:  entry["number"] = hit["info"]["number"]
+        db.entries.append( entry )
 
-    #json_formatted_str = json.dumps(j, indent=2)
-    #logger.debug(json_formatted_str)
-
+    # write the bibtex!
     writer = BibTexWriter()
-    writer.write(db)
+    print(writer.write(db))
 
     return 0            # all's well that ends well
 
