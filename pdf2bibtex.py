@@ -26,7 +26,8 @@ from bibtexparser.bibdatabase import BibDatabase
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument( '-p', '--pdf', dest="pdf_file", required=True, help='pdf file')
+
+    parser.add_argument( 'pdf_files', nargs='+', help='pdf filef')
     parser.add_argument( '-t', '--title', dest="title", help='manually specify title')
     parser.add_argument( '-l', '--log', dest="log", action='store_true', help='enable logging')
     args = parser.parse_args()
@@ -55,26 +56,13 @@ def query_dblp( title ):
     return j
 
 
-def main():
-    global logger
 
-    args = parse_args()
-
-    logger = logging.getLogger("pdf2bibtex")
-    if args.log:
-        # set up logging
-        logger.setLevel(logging.DEBUG)
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.DEBUG)
-        logger.addHandler(ch)
-        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-        ch.setFormatter(formatter)
-
+def process_pdf( args, filename ):
     if args.title is not None:
         title = args.title
     else:
         try:
-            title = pdftitle.get_title_from_file(args.pdf_file)
+            title = pdftitle.get_title_from_file( filename )
         except FileNotFoundError as e:
             logger.error( f"cannot find file: {e}")
             return 1
@@ -90,8 +78,7 @@ def main():
         logger.error( "DBLP didn't return any relevant hits. Sorry!" )
         return 1
 
-    db = BibDatabase()
-    db.entries = []
+    entries = []
 
     for hit in j["result"]["hits"]["hit"]:
         logger.info( f'processing result with id {hit["info"]["key"]}' )
@@ -135,7 +122,31 @@ def main():
         } 
         if "volume" in hit["info"]:  entry["volume"] = hit["info"]["volume"]
         if "number" in hit["info"]:  entry["number"] = hit["info"]["number"]
-        db.entries.append( entry )
+        entries.append(entry)
+    return entries
+
+
+def main():
+    global logger
+
+    args = parse_args()
+
+    logger = logging.getLogger("pdf2bibtex")
+    if args.log:
+        # set up logging
+        logger.setLevel(logging.DEBUG)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        logger.addHandler(ch)
+        formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+        ch.setFormatter(formatter)
+
+
+    db = BibDatabase()
+    # process each PDF file
+    db.entries = []
+    for filename in args.pdf_files:
+        db.entries += process_pdf(args,filename)
 
     # write the bibtex!
     writer = BibTexWriter()

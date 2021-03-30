@@ -25,19 +25,20 @@ And optionally:
 ## Usage:
 
 ```
-usage: pdf2bibtex.py [-h] -p PDF_FILE [-t TITLE] [-l]
+usage: pdf2bibtex.py [-h] [-t TITLE] [-l] pdf_files [pdf_files ...]
+
+positional arguments:
+  pdf_files             pdf filef
 
 optional arguments:
   -h, --help            show this help message and exit
-  -p PDF_FILE, --pdf PDF_FILE
-                        pdf file
   -t TITLE, --title TITLE
                         manually specify title
   -l, --log             enable logging
   ```
 
-  e.g., `python pdf2bibtex.py -p sherr.pdf`
-
+  e.g., `python pdf2bibtex.py sherr.pdf micah.pdf`
   
-  
+    
+## Silly Badges  
 [![Python application](https://github.com/GUSecLab/pdf2bibtex/actions/workflows/python-app.yml/badge.svg)](https://github.com/GUSecLab/pdf2bibtex/actions/workflows/python-app.yml)
