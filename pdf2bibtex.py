@@ -19,6 +19,7 @@ import pdftitle
 import logging
 import requests
 import json
+import sys
 from bibtexparser.bwriter import BibTexWriter
 from bibtexparser.bibdatabase import BibDatabase
 
@@ -140,4 +141,4 @@ def main():
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())
