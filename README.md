@@ -39,3 +39,5 @@ optional arguments:
   e.g., `python pdf2bibtex.py -p sherr.pdf`
 
   
+  
+[![Python application](https://github.com/GUSecLab/pdf2bibtex/actions/workflows/python-app.yml/badge.svg)](https://github.com/GUSecLab/pdf2bibtex/actions/workflows/python-app.yml)
